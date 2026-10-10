@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CodeZero - Quotes API</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+       font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+       background:#0f172a;color:#e2e8f0;padding:16px}
+  .card{width:100%;max-width:480px;background:#1e293b;border-radius:16px;padding:28px;
+        box-shadow:0 10px 30px rgba(0,0,0,.4)}
+  h1{margin:0 0 6px;font-size:24px}
+  .sub{margin:0 0 20px;color:#94a3b8;font-size:14px}
+  .quote-box{background:#0f172a;border-left:4px solid #6366f1;border-radius:10px;
+             padding:18px;margin-bottom:16px;min-height:110px;
+             display:flex;flex-direction:column;justify-content:center}
+  #quoteText{font-size:18px;line-height:1.5;margin:0 0 8px}
+  #quoteAuthor{font-size:14px;color:#94a3b8;margin:0}
+  button{width:100%;padding:12px;border:0;border-radius:10px;font-size:16px;
+         font-weight:600;cursor:pointer;margin-bottom:10px}
+  #quoteBtn{background:#6366f1;color:#fff}
+  #spamBtn{background:#334155;color:#e2e8f0}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .meter{height:10px;background:#334155;border-radius:99px;overflow:hidden;margin:16px 0 6px}
+  #bar{height:100%;width:100%;background:#22c55e;transition:width .3s,background .3s}
+  .small{font-size:13px;color:#94a3b8}
+  #status{margin-top:14px;padding:12px;border-radius:10px;background:#0f172a;
+          font-size:14px;min-height:44px}
+  .ok{color:#4ade80}.err{color:#f87171}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>💬 Quotes API</h1>
+  <p class="sub">Protected by a rate limiter: 10 requests per minute per user.</p>
+
+  <div class="quote-box">
+    <p id="quoteText">Click "Get Quote" to see a quote.</p>
+    <p id="quoteAuthor"></p>
+  </div>
+
+  <button id="quoteBtn">Get Quote</button>
+  <button id="spamBtn">Send 15 requests (test the limiter)</button>
+
+  <div class="meter"><div id="bar"></div></div>
+  <div class="small" id="left">Requests left: 10 / 10</div>
+  <div id="status">Ready ✅</div>
+</div>
+
+<script>
+const LIMIT = 10;
+const statusEl = document.getElementById('status');
+const bar = document.getElementById('bar');
+const left = document.getElementById('left');
+const quoteBtn = document.getElementById('quoteBtn');
+const spamBtn = document.getElementById('spamBtn');
+const quoteText = document.getElementById('quoteText');
+const quoteAuthor = document.getElementById('quoteAuthor');
+let timer = null;
+
+function setStatus(text, cls){ statusEl.className = cls || ''; statusEl.textContent = text; }
+
+function setRemaining(n){
+  left.textContent = `Requests left: ${n} / ${LIMIT}`;
+  bar.style.width = (n / LIMIT * 100) + '%';
+  bar.style.background = n > 5 ? '#22c55e' : n > 2 ? '#f59e0b' : '#ef4444';
+}
+
+function countdown(sec){
+  clearInterval(timer);
+  quoteBtn.disabled = spamBtn.disabled = true;
+  setStatus(`⛔ Too many requests! Please wait ${sec} seconds.`, 'err');
+  timer = setInterval(() => {
+    sec--;
+    if (sec <= 0){
+      clearInterval(timer);
+      quoteBtn.disabled = spamBtn.disabled = false;
+      setRemaining(LIMIT);
+      setStatus('You can try again now ✅', 'ok');
+    } else {
+      setStatus(`⛔ Too many requests! Please wait ${sec} seconds.`, 'err');
+    }
+  }, 1000);
+}
+
+async function getQuote(){
+  try {
+    const res = await fetch('/quote');
+    const remaining = res.headers.get('X-RateLimit-Remaining');
+    if (remaining !== null) setRemaining(Number(remaining));
+
+    if (res.status === 429){
+      countdown(Number(res.headers.get('Retry-After')) || 60);
+      return false;
+    }
+    const data = await res.json();
+    quoteText.textContent = '“' + data.text + '”';
+    quoteAuthor.textContent = '— ' + data.author;
+    setStatus('Request successful ✅', 'ok');
+    return true;
+  } catch (e){
+    setStatus('Could not connect to the server.', 'err');
+    return false;
+  }
+}
+
+quoteBtn.onclick = getQuote;
+spamBtn.onclick = async () => {
+  for (let i = 0; i < 15; i++){ if (!(await getQuote())) break; }
+};
+</script>
+</body>
+</html>
